@@ -6,6 +6,16 @@ from scipy import ndimage
 from scipy import optimize
 
 def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3):
+    """Estimate and subtract HeI from each IMSET extensions of a list of IMA files.
+    The files need to be from the same HST visit, as this assumes a constant Zodi component level.
+    ima_names: A list of IMA files
+    filt: G102 or G141
+    border: Number of columns on the left of the detector to Ignore. Default=25
+    iraf: local of the IREF calibration file. Default is None and th Environment variable iref will be used.
+    ninter: Maximumn number of iterations. Default=20
+    sigma: Threshold over the background for a pixel to flagged as an object. Default=2
+    minsize: Minimum size of an object spectrum. Default=3
+    """
     if iref==None:
         iref = os.environ['iref']
 
@@ -54,6 +64,12 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
 
     # Getting the flat-field used for these data, these corrected for the gain for each quadrant
     ff_name = fits.open(ima_names[0])[0].header["PFLTFILE"].split("$")[-1]
+
+    # Getting the grism flat-field
+    if not os.path.isfile(os.path.join(iref,ff_name)):
+        print(os.path.join(iref,ff_name),"was not found. Please set the environmemt variable iref to point to the location of the WFC3 CDBS location.")
+        sys.exit(-1)
+    print("Loading quadrant flat-field",os.path.join(iref,ff_name))
     ff0_data = fits.open(os.path.join(iref,ff_name))[1].data[5:1014+5,5:1014+5]
 
     # Setting up image weights
@@ -162,7 +178,7 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             HeIs[ima_names[j]] = {}
             for i in range(len(data0s[j])):
                 ii = ii + 1
-                print("%s IMSET:%d Zodi: %3.3f  He: %3.3f (%3.2f,%3.2f) %3.2f" % (ima_names[j],i,x[-1],x[ii],x[-1]*samp0s[j][i],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
+                print("%s IMSET:%2d Zodi: %3.3f e-/s (%5.2f e-) He: %3.3f e-/s (%5.2f e-) Total: %5.2f e-" % (ima_names[j],i,x[-1],x[-1]*samp0s[j][i],x[ii],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
                 HeIs[ima_names[j]][i+1] = x[ii]
 
                 sky0s[j][i] = x[-1]*zodi + x[ii]*bcks[1]
@@ -172,18 +188,36 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
         if np.array_equal(old_x,x):
             print("Converged!")
             converged = True
-            retrun HeIs, Zodi
+            break
         else:
             old_x = x 
 
-    return HeIs,Zodi
+    # Once we have HeI estimates for each IMSET of every IMA file, we subtract those
+    HeI_data = bcks[1]
+    for f in HeIs.keys():
+        print("Updating ",f)
+        fin = fits.open(f,mode="update")
 
-def do_visit(IMA_names,filt):
-    """Process IMA files and subtract HeI estimate from each IMSET"""
-    HeIs,Zodi = bck_subtract2(ima_names,filt)
-    #sub_HeI_ima2(HeIs,Zodi)
 
+        for extver in HeIs[f].keys():
+            print("1:",np.median(fin["SCI",extver].data[5:1014+5,5:1014+5]))
 
+            print("IMSET:",extver)
+            try:
+                val = fin["SCI",extver].header["HeI"] # testing
+                print("HeI found in ",f,"Aborting..")
+                sys.exit(1)
+            except:
+                pass
+    
+            print("IMSET:",extver,"subtracting",HeIs[f][extver])
+            fin["SCI",extver].data[5:1014+5,5:1014+5] = fin["SCI",extver].data[5:1014+5,5:1014+5] - HeIs[f][extver]*HeI_data 
+            fin["SCI",extver].header["HeI"] = (HeIs[f][extver],"HeI level subtracted (e-/s)")
+    
+            print("2 check:",np.median(fin["SCI",extver].data[5:1014+5,5:1014+5]))
+
+        fin.close()
+    
 if __name__=="__main__":
     IMA_names = glob.glob(sys.argv[1])
     grism = sys.argv[2]
