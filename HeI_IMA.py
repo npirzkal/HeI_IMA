@@ -162,7 +162,7 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             HeIs[ima_names[j]] = {}
             for i in range(len(data0s[j])):
                 ii = ii + 1
-                print("%s %d Zodi: %3.3f  He: %3.3f (%3.2f,%3.2f) %3.2f" % (ima_names[j],i,x[-1],x[ii],x[-1]*samp0s[j][i],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
+                print("%s IMSET:%d Zodi: %3.3f  He: %3.3f (%3.2f,%3.2f) %3.2f" % (ima_names[j],i,x[-1],x[ii],x[-1]*samp0s[j][i],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
                 HeIs[ima_names[j]][i+1] = x[ii]
 
                 sky0s[j][i] = x[-1]*zodi + x[ii]*bcks[1]
