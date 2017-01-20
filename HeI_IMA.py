@@ -32,7 +32,7 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
 
     nimas = len(ima_names)
 
-    print("Processing:",sum(nexts),"IMSETSs in ",nimas," raw files.")
+    print("Processing:",sum(nexts),"IMSETSs in ",nimas," IMA files.")
 
     border = int(border)
     print("Grism:",filt)
@@ -40,10 +40,12 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
 
     path = os.path.split(__file__)[0]
 
+    # Background components for the two grisms. These are the components described in ISR WFC3-2015-17 but the broad band filter flat-field
+    # was de-applied, and the default grism flatfield was applied, i.e. the quandrant gain compensation.
     if filt=="G102":
-            sky_names  = [os.path.join(path,"zodi_G102_clean_ff.fits"),os.path.join(path,"excess_G102_clean_ff.fits")]
+            sky_names  = [os.path.join(path,"zodi_G102_clean_np.fits"),os.path.join(path,"excess_G102_clean_np.fits")]
     if filt=="G141":
-            sky_names = [os.path.join(path,"zodi_G141_clean_ff.fits"),os.path.join(path,"excess_lo_G141_clean_ff.fits")] 
+            sky_names = [os.path.join(path,"zodi_G141_clean_np.fits"),os.path.join(path,"excess_lo_G141_clean_np.fits")] 
 
     # Setting up DQ mask values to exclude
     bit_mask = (4+8+16+32+128+256+1024+2048+8192)
@@ -55,22 +57,12 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
     dq0s = []
     dqm0s = []
     for j in range(nimas):
-        print(ima_names[j],nexts[j],"IMSETs")
+        print("Loading ",ima_names[j],nexts[j],"IMSETs")
         data0s.append([fits.open(ima_names[j])["SCI",ext].data[5:1014+5,5:1014+5] for ext in range(1,nexts[j])])
         err0s.append([fits.open(ima_names[j])["ERR",ext].data[5:1014+5,5:1014+5] for ext in range(1,nexts[j])])
         samp0s.append([fits.open(ima_names[j])["SCI",ext].header["SAMPTIME"] for ext in range(1,nexts[j])])
         dq0s.append([fits.open(ima_names[j])["DQ",ext].data[5:1014+5,5:1014+5] for ext in range(1,nexts[j])])
     dqm0s = [[np.bitwise_and(dq0,np.zeros(np.shape(dq0),'Int16')+ bit_mask) for dq0 in dq0s[j]] for j in range(nimas)]
-
-    # Getting the flat-field used for these data, these corrected for the gain for each quadrant
-    ff_name = fits.open(ima_names[0])[0].header["PFLTFILE"].split("$")[-1]
-
-    # Getting the grism flat-field
-    if not os.path.isfile(os.path.join(iref,ff_name)):
-        print(os.path.join(iref,ff_name),"was not found. Please set the environmemt variable iref to point to the location of the WFC3 CDBS location.")
-        sys.exit(-1)
-    print("Loading quadrant flat-field",os.path.join(iref,ff_name))
-    ff0_data = fits.open(os.path.join(iref,ff_name))[1].data[5:1014+5,5:1014+5]
 
     # Setting up image weights
     whts = []
@@ -82,9 +74,15 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             whts_j.append(1./err**2)
         whts.append(whts_j)
 
-    bcks = [fits.open(xx)[0].data/ff0_data for xx in sky_names]
+    bcks = [fits.open(xx)[0].data for xx in sky_names]
+
+
     zodi = bcks[0]
 
+    import nf
+    nf.disp(sky_names[0],1)
+    nf.disp(bcks[0],2)
+    raw_input("..")
     npar = sum(nexts)
     print("Iteratively solving for ",npar," HeI values and 1 Zodi value...")
     
@@ -200,8 +198,6 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
 
 
         for extver in HeIs[f].keys():
-            print("1:",np.median(fin["SCI",extver].data[5:1014+5,5:1014+5]))
-
             print("IMSET:",extver)
             try:
                 val = fin["SCI",extver].header["HeI"] # testing
@@ -214,7 +210,6 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             fin["SCI",extver].data[5:1014+5,5:1014+5] = fin["SCI",extver].data[5:1014+5,5:1014+5] - HeIs[f][extver]*HeI_data 
             fin["SCI",extver].header["HeI"] = (HeIs[f][extver],"HeI level subtracted (e-/s)")
     
-            print("2 check:",np.median(fin["SCI",extver].data[5:1014+5,5:1014+5]))
 
         fin.close()
     
