@@ -5,20 +5,16 @@ from astropy.io import fits
 from scipy import ndimage
 from scipy import optimize
 
-def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3):
-    """Estimate and subtract HeI from each IMSET extensions of a list of IMA files.
+def HeI_estimate(ima_names,filt,border=25,niter=20,sigma=2,minsize = 3):
+    """Estimate and subtract the HeI contribution from each IMSET extensions of a list of IMA files.
     The files need to be from the same HST visit, as this assumes a constant Zodi component level.
     ima_names: A list of IMA files
     filt: G102 or G141
     border: Number of columns on the left of the detector to Ignore. Default=25
-    iraf: local of the IREF calibration file. Default is None and th Environment variable iref will be used.
     ninter: Maximumn number of iterations. Default=20
     sigma: Threshold over the background for a pixel to flagged as an object. Default=2
     minsize: Minimum size of an object spectrum. Default=3
     """
-    if iref==None:
-        iref = os.environ['iref']
-
 
     ima_names0 = []
     for f in ima_names:
@@ -79,10 +75,6 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
 
     zodi = bcks[0]
 
-    import nf
-    nf.disp(sky_names[0],1)
-    nf.disp(bcks[0],2)
-    raw_input("..")
     npar = sum(nexts)
     print("Iteratively solving for ",npar," HeI values and 1 Zodi value...")
     
@@ -176,16 +168,15 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             HeIs[ima_names[j]] = {}
             for i in range(len(data0s[j])):
                 ii = ii + 1
-                print("%s IMSET:%2d Zodi: %3.3f e-/s (%5.2f e-) He: %3.3f e-/s (%5.2f e-) Total: %5.2f e-" % (ima_names[j],i,x[-1],x[-1]*samp0s[j][i],x[ii],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
-                HeIs[ima_names[j]][i+1] = x[ii]
 
+                print("%s IMSET:%2d Zodi: %3.3f e-/s (%5.2f e-) He: %3.3f e-/s (%5.2f e-) Total: %5.2f e-" % (ima_names[j],i,x[-1],x[-1]*samp0s[j][i],x[ii],x[ii]*samp0s[j][i],np.median(data0s[j][i].ravel())*samp0s[j][i]))
+                
+                HeIs[ima_names[j]][i+1] = x[ii]
                 sky0s[j][i] = x[-1]*zodi + x[ii]*bcks[1]
 
         # If the background and X have converged then we stop
-        converged = False
         if np.array_equal(old_x,x):
             print("Converged!")
-            converged = True
             break
         else:
             old_x = x 
@@ -196,9 +187,7 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
         print("Updating ",f)
         fin = fits.open(f,mode="update")
 
-
         for extver in HeIs[f].keys():
-            print("IMSET:",extver)
             try:
                 val = fin["SCI",extver].header["HeI"] # testing
                 print("HeI found in ",f,"Aborting..")
@@ -206,7 +195,7 @@ def HeI_estimate(ima_names,filt,border=25,iref=None,niter=20,sigma=2,minsize = 3
             except:
                 pass
     
-            print("IMSET:",extver,"subtracting",HeIs[f][extver])
+            print(f,"IMSET:",extver,"subtracting",HeIs[f][extver])
             fin["SCI",extver].data[5:1014+5,5:1014+5] = fin["SCI",extver].data[5:1014+5,5:1014+5] - HeIs[f][extver]*HeI_data 
             fin["SCI",extver].header["HeI"] = (HeIs[f][extver],"HeI level subtracted (e-/s)")
     
