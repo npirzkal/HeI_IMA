@@ -24,6 +24,8 @@ def HeI_estimate(ima_names,filt,border=25,niter=20,sigma=2,minsize = 3):
         ima_names0.append(f)
     ima_names = ima_names0
 
+    filt = filt0
+    
     nexts = [fits.open(ima_name)[-1].header["EXTVER"] for ima_name in ima_names]
 
     nimas = len(ima_names)
@@ -198,7 +200,8 @@ def HeI_estimate(ima_names,filt,border=25,niter=20,sigma=2,minsize = 3):
             print(f,"IMSET:",extver,"subtracting",HeIs[f][extver])
             fin["SCI",extver].data[5:1014+5,5:1014+5] = fin["SCI",extver].data[5:1014+5,5:1014+5] - HeIs[f][extver]*HeI_data 
             fin["SCI",extver].header["HeI"] = (HeIs[f][extver],"HeI level subtracted (e-/s)")
-    
+            fin["SCI",extver].header["HeI_iter"] = (iter,"HeI Iterations needed max=%d" % (niter))
+
 
         fin.close()
     
